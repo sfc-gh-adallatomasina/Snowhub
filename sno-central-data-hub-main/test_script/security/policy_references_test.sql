@@ -1,0 +1,24 @@
+-------------------------------------
+--POLICY_REFERENCES 
+--Daily snap
+-------------------------------------
+select * from snowflake.account_usage.policy_references; --1 record
+select * from security.policy_reference_history; --26
+
+select dw_load_ts, count(*) from security.policy_reference_history group by 1 order by 1;
+
+--source to history comparison
+select POLICY_DB, POLICY_SCHEMA, POLICY_ID, POLICY_NAME, POLICY_KIND, REF_DATABASE_NAME, REF_SCHEMA_NAME, REF_ENTITY_NAME, REF_ENTITY_DOMAIN, REF_COLUMN_NAME, REF_ARG_COLUMN_NAMES, TAG_DATABASE, TAG_SCHEMA, TAG_NAME, POLICY_STATUS
+from snowflake.account_usage.policy_references
+minus
+select POLICY_DB, POLICY_SCHEMA, POLICY_ID, POLICY_NAME, POLICY_KIND, REF_DATABASE_NAME, REF_SCHEMA_NAME, REF_ENTITY_NAME, REF_ENTITY_DOMAIN, REF_COLUMN_NAME, REF_ARG_COLUMN_NAMES, TAG_DATABASE, TAG_SCHEMA, TAG_NAME, POLICY_STATUS
+from SNO_CENTRAL_MONITORING_RAW_DB.SECURITY.POLICY_REFERENCE_HISTORY
+where dw_load_ts > current_date();
+
+--history to source comparison
+select POLICY_DB, POLICY_SCHEMA, POLICY_ID, POLICY_NAME, POLICY_KIND, REF_DATABASE_NAME, REF_SCHEMA_NAME, REF_ENTITY_NAME, REF_ENTITY_DOMAIN, REF_COLUMN_NAME, REF_ARG_COLUMN_NAMES, TAG_DATABASE, TAG_SCHEMA, TAG_NAME, POLICY_STATUS
+from SNO_CENTRAL_MONITORING_RAW_DB.SECURITY.POLICY_REFERENCE_HISTORY
+where dw_load_ts > current_date()
+minus
+select POLICY_DB, POLICY_SCHEMA, POLICY_ID, POLICY_NAME, POLICY_KIND, REF_DATABASE_NAME, REF_SCHEMA_NAME, REF_ENTITY_NAME, REF_ENTITY_DOMAIN, REF_COLUMN_NAME, REF_ARG_COLUMN_NAMES, TAG_DATABASE, TAG_SCHEMA, TAG_NAME, POLICY_STATUS
+from snowflake.account_usage.policy_references;

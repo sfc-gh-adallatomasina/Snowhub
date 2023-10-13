@@ -1,0 +1,157 @@
+stages:
+  - sno_hub_initial_setup
+  - sno_sat_deploy
+  - sno_hub_deploy
+
+variables:
+  INITIALISE_HUB:
+    value: "NO"
+    description: "Initialise Snowflake Hub Account - Choose YES if 1st run, for all subsequent runs, choose NO"
+  SNOWFLAKE_HUB_ACCOUNT_NAME:
+    value: "SNOLSELZPROD"
+    description: "Snowflake Hub Account Name"
+  SNOWFLAKE_HUB_REGION:
+    value: "AWS_EU_WEST_2"
+    description: "Snowflake Hub Account Region Name"
+  SNOWFLAKE_HUB_ACCOUNT_USER: 
+    value: SVC_TF_SF_USER
+    description: "Snowflake Hub Service account user name."
+  SNOWFLAKE_HUB_ACCOUNT_ORG_NAME:
+    value: "LSEG"
+    description: "Snowflake Hub Account org name"
+  SNOWFLAKE_SAT_ACCOUNT_NAME:
+    value: "none"
+    description: "Snowflake Satellite Account. Please update"
+  SNOWFLAKE_SAT_REGION:
+    value: "none"
+    description: "Snowflake Satellite Account Region Name"
+  SNOWFLAKE_SAT_ACCOUNT_USER: 
+    value: SVC_TF_SF_USER
+    description: "Snowflake Satellite Service account user name."
+  SNOWFLAKE_SAT_ACCOUNT_ORG_NAME:
+    value: "LSEG"
+    description: "Snowflake Satellite Account org name. Please update"
+  SNOWFLAKE_SAT_PRIVATELINK_USAGE:
+    value: "NO"
+    description: "Does Snowflake Satellite Account use Private Link - YES or NO"
+
+
+.base:
+  image: registry.dx1.lseg.com/snowflake-landing-zone/maintenance/sno-docker-image-creator/snowflake-centos:latest
+  tags:
+    - snowflake
+
+# Hub Setup - To be run only once to create core objects
+Initialise Hub (One Off):
+  stage: sno_hub_initial_setup
+  extends:
+    - .base
+  rules:
+    - if: '$INITIALISE_HUB == "YES"'
+  before_script:
+    #- which python3
+    #- cd /etc/yum.repos.d/
+    #- sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
+    #- sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
+    #- cd ~
+    #- yum install unzip -y
+    #- curl -O https://sfc-repo.snowflakecomputing.com/snowsql/bootstrap/1.2/linux_x86_64/snowsql-1.2.22-linux_x86_64.bash
+    #- touch ~/.profile
+    #- pwd
+    #- SNOWSQL_DEST=/usr/bin SNOWSQL_LOGIN_SHELL=~/.profile bash snowsql-1.2.22-linux_x86_64.bash
+    #- snowsql -v
+    ##- python3 -v
+    - cd /builds/app/app-01434/applications/sno-central-data-hub
+    - pwd
+    # git clone --single-branch -b V0.1 https://sno-landingzone:${SNO_LANDINGZONE_TOKEN}@gitlab.com/lseg/iss/cet/snowflake/projects/sno-central-data-hub.git ../sno-rawdata-collection
+    - chmod 777 ../sno-central-data-hub/helpers/*sh
+    - mkdir -p /builds/app/app-01434/applications/sno-central-data-hub/log
+    - ls -l /builds/app/app-01434/applications/sno-central-data-hub/log
+  script:
+    - cd helpers
+    - ./executor.sh ${SNOWFLAKE_HUB_ACCOUNT_NAME} ${SNOWFLAKE_HUB_ACCOUNT_USER} ${SNOWFLAKE_HUB_ACCOUNT_USER} ${SNOWFLAKE_HUB_ACCOUNT_ORG_NAME} YES HUB INITIALISE
+  artifacts:
+    paths: 
+      - /builds/app/app-01434/applications/sno-central-data-hub/log
+
+
+Satellite Deploy Share:
+  stage: sno_sat_deploy
+  extends:
+    - .base
+  rules:
+    - if: '$SNOWFLAKE_HUB_REGION == $SNOWFLAKE_SAT_REGION'
+  #secrets:
+  #  service_account_password:
+  #    vault: "cet/snowflake/snowflake_accounts/common_user/password@secret"
+  before_script:
+    - cd /builds/app/app-01434/applications/sno-central-data-hub
+    - pwd
+    #- git clone --single-branch -b V0.1 https://sno-landingzone:${SNO_LANDINGZONE_TOKEN}@gitlab.com/lseg/iss/cet/snowflake/projects/sno-central-data-hub.git ../sno-rawdata-collection
+    - chmod 777 ../sno-central-data-hub/helpers/*sh
+    - mkdir -p /builds/app/app-01434/applications/sno-central-data-hub/log
+  script:
+    - cd helpers
+    #- export SNOWSQL_PWD=${SERVICE_ACCOUNT_PASSWORD}
+    - ./executor.sh ${SNOWFLAKE_SAT_ACCOUNT_NAME} ${SNOWFLAKE_SAT_ACCOUNT_USER}  ${SNOWFLAKE_SAT_ACCOUNT_USER}  ${SNOWFLAKE_SAT_ACCOUNT_ORG_NAME} ${SNOWFLAKE_SAT_PRIVATELINK_USAGE} SATELLITE DEPLOY_SHARE
+    #- ./executor.sh ${SNOWFLAKE_SAT_ACCOUNT_NAME} ${SNOWFLAKE_SAT_ACCOUNT_USER} SAT_SNO_USER_KEY ${SNOWFLAKE_SAT_ACCOUNT_ORG_NAME} ${SNOWFLAKE_SAT_PRIVATELINK_USAGE} SATELLITE DEPLOY_SHARE
+    #- cd ../../sno-chargeback
+    #- git config --global user.name "${GITLAB_USER_NAME}"
+    #- git config --global user.email "${GITLAB_USER_EMAIL}"
+    #- git status
+    #- git add --all 
+    #- git commit -m  "new context file"
+    #- git push https://sno-chargeback:${CI_JOB_TOKEN}@gitlab.com/lseg/iss/cet/snowflake/sno-chargeback.git "HEAD:V2"
+  artifacts:
+    paths: 
+      - /builds/app/app-01434/applications/sno-central-data-hub/log
+
+Satellite Deploy Replication:
+  stage: sno_sat_deploy
+  extends:
+    - .base
+  rules:
+    - if: '$SNOWFLAKE_HUB_REGION != $SNOWFLAKE_SAT_REGION'
+  before_script:
+    - cd /builds/app/app-01434/applications/sno-central-data-hub
+    - pwd
+    #- git clone --single-branch -b V0.1 https://sno-landingzone:${SNO_LANDINGZONE_TOKEN}@gitlab.com/lseg/iss/cet/snowflake/projects/sno-central-data-hub.git ../sno-rawdata-collection
+    - chmod 777 ../sno-central-data-hub/helpers/*sh
+    - mkdir -p /builds/app/app-01434/applications/sno-central-data-hub/log
+  script:
+    - cd helpers
+    #- export SNOWSQL_PWD=${SERVICE_ACCOUNT_PASSWORD}
+    - ./executor.sh ${SNOWFLAKE_SAT_ACCOUNT_NAME} ${SNOWFLAKE_SAT_ACCOUNT_USER}  ${SNOWFLAKE_SAT_ACCOUNT_USER}  ${SNOWFLAKE_SAT_ACCOUNT_ORG_NAME} ${SNOWFLAKE_SAT_PRIVATELINK_USAGE} SATELLITE DEPLOY_REPLICATION
+  artifacts:
+    paths: 
+      - /builds/app/app-01434/applications/sno-central-data-hub/log
+
+Hub Deploy Share:
+  stage: sno_hub_deploy
+  extends:
+    - .base
+  rules:
+    - if: '$SNOWFLAKE_HUB_REGION == $SNOWFLAKE_SAT_REGION'
+  before_script:
+    - cd /builds/app/app-01434/applications/sno-central-data-hub
+    - pwd
+    # git clone --single-branch -b V0.1 https://sno-landingzone:${SNO_LANDINGZONE_TOKEN}@gitlab.com/lseg/iss/cet/snowflake/projects/sno-central-data-hub.git ../sno-rawdata-collection
+    - chmod 777 ../sno-central-data-hub/helpers/*sh
+  script:
+    - cd helpers
+    - ./executor.sh ${SNOWFLAKE_HUB_ACCOUNT_NAME} ${SNOWFLAKE_HUB_ACCOUNT_USER} ${SNOWFLAKE_HUB_ACCOUNT_USER} ${SNOWFLAKE_HUB_ACCOUNT_ORG_NAME} YES HUB DEPLOY_SHARE
+
+Hub Deploy Replication:
+  stage: sno_hub_deploy
+  extends:
+    - .base
+  rules:
+    - if: '$SNOWFLAKE_HUB_REGION != $SNOWFLAKE_SAT_REGION'
+  before_script:
+    - cd /builds/app/app-01434/applications/sno-central-data-hub
+    - pwd
+    # git clone --single-branch -b V0.1 https://sno-landingzone:${SNO_LANDINGZONE_TOKEN}@gitlab.com/lseg/iss/cet/snowflake/projects/sno-central-data-hub.git ../sno-rawdata-collection
+    - chmod 777 ../sno-central-data-hub/helpers/*sh
+  script:
+    - cd helpers
+    - ./executor.sh ${SNOWFLAKE_HUB_ACCOUNT_NAME} ${SNOWFLAKE_HUB_ACCOUNT_USER} ${SNOWFLAKE_HUB_ACCOUNT_USER} ${SNOWFLAKE_HUB_ACCOUNT_ORG_NAME} YES HUB DEPLOY_REPLICATION
